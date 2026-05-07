@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORBITON — Inventory Intelligence</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --bg2: #141720;
+    --bg3: #1c2030;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --teal: #14b8a6;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar { background: var(--bg2); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 8px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .sidebar-logo { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--accent2); letter-spacing: .08em; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .sidebar-logo span { display: block; font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 2px; letter-spacing: 0; font-family: var(--sans); }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 13px; transition: all .15s; user-select: none; }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: rgba(99,102,241,.15); color: var(--accent2); }
+  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .nav-sep { height: 1px; background: var(--border); margin: 8px 0; }
+  .sidebar-footer { margin-top: auto; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  /* Main */
+  .main { padding: 28px 32px; overflow-y: auto; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Header */
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+  .page-title { font-size: 22px; font-weight: 600; color: var(--text); }
+  .page-sub { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+  .live-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--mono); color: var(--green); background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.2); padding: 5px 10px; border-radius: 20px; }
+  .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+
+  /* KPI row */
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
+  .kpi { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .kpi-label { font-size: 11px; font-family: var(--mono); color: var(--muted); letter-spacing: .05em; margin-bottom: 8px; }
+  .kpi-val { font-size: 28px; font-weight: 600; font-family: var(--mono); }
+  .kpi-val.ok { color: var(--green); }
+  .kpi-val.warn { color: var(--amber); }
+  .kpi-val.danger { color: var(--red); }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* Cards */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .card-title { font-size: 11px; font-family: var(--mono); color: var(--muted); letter-spacing: .06em; margin-bottom: 14px; }
+
+  /* Grid */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1.8fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { font-family: var(--mono); font-size: 10px; letter-spacing: .06em; color: var(--muted); text-align: left; padding: 0 8px 10px; }
+  td { padding: 9px 8px; border-top: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* Status pills */
+  .pill { display: inline-block; font-size: 10px; font-family: var(--mono); font-weight: 500; padding: 2px 8px; border-radius: 4px; letter-spacing: .04em; }
+  .pill.safe { background: rgba(16,185,129,.12); color: var(--green); border: 1px solid rgba(16,185,129,.2); }
+  .pill.watch { background: rgba(245,158,11,.12); color: var(--amber); border: 1px solid rgba(245,158,11,.2); }
+  .pill.critical { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.2); }
+
+  /* Bar */
+  .bar-wrap { height: 4px; background: rgba(255,255,255,.06); border-radius: 2px; margin-top: 5px; width: 80px; }
+  .bar { height: 4px; border-radius: 2px; }
+  .bar.safe { background: var(--green); }
+  .bar.watch { background: var(--amber); }
+  .bar.critical { background: var(--red); }
+
+  /* Alerts */
+  .alert { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 7px; margin-bottom: 8px; font-size: 12px; }
+  .alert.critical { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.18); }
+  .alert.watch { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.18); }
+  .alert.safe { background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.18); }
+  .alert-icon { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .alert-icon.critical { background: var(--red); }
+  .alert-icon.watch { background: var(--amber); }
+  .alert-icon.safe { background: var(--green); }
+  .alert-name { font-weight: 500; color: var(--text); margin-bottom: 2px; }
+  .alert-msg { color: var(--muted); }
+
+  /* Explain box */
+  .explain { background: rgba(99,102,241,.06); border: 1px solid rgba(99,102,241,.15); border-radius: 8px; padding: 14px 16px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .explain strong { color: var(--accent2); font-weight: 500; }
+
+  /* Chart */
+  .chart-wrap { position: relative; }
+
+  /* Upload */
+  .dropzone { border: 2px dashed var(--border2); border-radius: 10px; padding: 40px; text-align: center; cursor: pointer; transition: border-color .2s; margin-bottom: 16px; }
+  .dropzone:hover { border-color: var(--accent); }
+  .dropzone p { font-size: 14px; color: var(--text); margin-bottom: 6px; font-weight: 500; }
+  .dropzone small { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .btn { display: inline-block; padding: 8px 18px; background: var(--accent); color: #fff; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: opacity .15s; font-family: var(--sans); }
+  .btn:hover { opacity: .85; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border2); color: var(--text); }
+
+  /* Usage logger */
+  .log-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .log-form select, .log-form input { background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 10px; color: var(--text); font-family: var(--sans); font-size: 13px; }
+  .log-form select { flex: 1; min-width: 200px; }
+  .log-form input { width: 100px; }
+
+  /* Prediction items */
+  .pred-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 7px; background: var(--bg3); margin-bottom: 8px; font-size: 12px; }
+  .pred-item.critical { background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.15); }
+  .pred-item.watch { background: rgba(245,158,11,.07); border: 1px solid rgba(245,158,11,.15); }
+  .pred-name { font-weight: 500; color: var(--text); max-width: 200px; }
+  .pred-detail { text-align: right; color: var(--muted); }
+  .pred-days { font-family: var(--mono); font-weight: 600; font-size: 14px; }
+  .pred-days.critical { color: var(--red); }
+  .pred-days.watch { color: var(--amber); }
+  .pred-days.safe { color: var(--green); }
+
+  .mb16 { margin-bottom: 16px; }
+  .mt8 { margin-top: 8px; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-10px); } }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <span>Orbiton</span>
+      INVENTORY INTELLIGENCE
+    </div>
+    <div class="nav-item active" onclick="showPage('dashboard',this)"><div class="nav-dot"></div> Dashboard</div>
+    <div class="nav-item" onclick="showPage('prediction',this)"><div class="nav-dot"></div> Prediction</div>
+    <div class="nav-item" onclick="showPage('analysis',this)"><div class="nav-dot"></div> Analysis</div>
+    <div class="nav-item" onclick="showPage('logger',this)"><div class="nav-dot"></div> Log usage & restock</div>
+    <div class="nav-sep"></div>
+    <div class="nav-item" onclick="showPage('upload',this)"><div class="nav-dot"></div> Update data</div>
+    <div class="sidebar-footer" id="last-update">Loading…</div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Inventory dashboard</div>
+          <div class="page-sub">All 9 nitrosamine compounds + 9 raw material precursors</div>
+        </div>
+        <div class="live-badge"><div class="pulse"></div> Live system</div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="kpi"><div class="kpi-label">TOTAL COMPOUNDS</div><div class="kpi-val ok" id="k-total">—</div><div class="kpi-sub">All tracked</div></div>
+        <div class="kpi"><div class="kpi-label">CRITICAL STOCK</div><div class="kpi-val danger" id="k-critical">—</div><div class="kpi-sub">Reorder immediately</div></div>
+        <div class="kpi"><div class="kpi-label">WATCH LIST</div><div class="kpi-val warn" id="k-watch">—</div><div class="kpi-sub">Order within 2 weeks</div></div>
+        <div class="kpi"><div class="kpi-label">AVG DAYS REMAINING</div><div class="kpi-val" id="k-avg">—</div><div class="kpi-sub">All compounds</div></div>
+        <div class="kpi"><div class="kpi-label">SAFE STOCK</div><div class="kpi-val ok" id="k-safe">—</div><div class="kpi-sub">No action needed</div></div>
+      </div>
+
+      <div class="grid3">
+        <div class="card">
+          <div class="card-title">STOCK STATUS — ALL COMPOUNDS</div>
+          <table>
+            <thead><tr><th>Structure</th><th>Compound</th><th>Qty</th><th>Days left</th><th>Status</th></tr></thead>
+            <tbody id="stock-table"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="card-title">ACTIVE ALERTS</div>
+          <div id="alert-list"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">DAYS REMAINING — ALL COMPOUNDS</div>
+        <div class="chart-wrap" style="height:200px"><canvas id="barChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- PREDICTION -->
+    <div class="page" id="page-prediction">
+      <div class="page-header">
+        <div>
+          <div class="page-title">AI stock prediction</div>
+          <div class="page-sub">Predicted depletion dates based on usage patterns</div>
+        </div>
+      </div>
+
+      <div class="explain mb16" id="pred-explain">Loading AI analysis…</div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">DEPLETION FORECAST</div>
+          <div id="pred-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">USAGE TREND (SIMULATED 8 WEEKS)</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="trendChart"></canvas></div>
+          <div class="card-title mt8">STOCK LEVEL PROJECTION (30 DAYS)</div>
+          <div class="chart-wrap" style="height:160px"><canvas id="projChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANALYSIS -->
+    <div class="page" id="page-analysis">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Linkage analysis</div>
+          <div class="page-sub">Raw material → nitrosamine compound relationships</div>
+        </div>
+      </div>
+      <div class="explain mb16" id="analysis-explain">Loading…</div>
+      <div class="card mb16">
+        <div class="card-title">PRECURSOR → COMPOUND MAP</div>
+        <table>
+          <thead><tr><th>Raw material</th><th>Produces</th><th>Precursor qty</th><th>Compound qty</th><th>Ratio</th><th>Risk</th></tr></thead>
+          <tbody id="analysis-table"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">COMPOUND STOCK DISTRIBUTION</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="pieChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- LOGGER -->
+    <div class="page" id="page-logger">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Log usage & restock</div>
+          <div class="page-sub">Record consumption and replenishment to keep inventory accurate</div>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="card-title">RECORD USAGE EVENT</div>
+          <div class="log-form">
+            <select id="log-compound"><option value="">Select compound…</option></select>
+            <input type="number" id="log-qty" placeholder="Amount used (g)" step="0.001" min="0">
+            <button class="btn" onclick="logUsage()">Log usage</button>
+          </div>
+          <div id="log-msg" style="font-size:12px;color:var(--green);min-height:20px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">RECORD RESTOCK EVENT</div>
+          <div class="log-form">
+            <select id="restock-compound"><option value="">Select compound…</option></select>
+            <input type="number" id="restock-qty" placeholder="Amount added (g)" step="0.001" min="0">
+            <button class="btn" onclick="logRestock()">Log restock</button>
+          </div>
+          <div id="restock-msg" style="font-size:12px;color:var(--green);min-height:20px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">HOW LOGGING IMPROVES PREDICTIONS</div>
+        <div class="explain">
+          Every time you record a usage event, the AI recalculates the <strong>daily average consumption rate</strong> for that compound. After just 2–3 entries per compound, predictions become significantly more accurate than the default estimates. The model uses the last <strong>30 days of logged data</strong> to compute a rolling average, so it adapts automatically as your usage patterns change.
+        </div>
+      </div>
+
+      <div class="card mt8">
+        <div class="card-title">UPLOAD STRUCTURE IMAGE</div>
+        <div class="log-form">
+          <select id="structure-compound"><option value="">Select compound…</option></select>
+          <input type="file" id="structure-file" accept="image/png" />
+          <button class="btn" onclick="uploadStructure()">Upload image</button>
+        </div>
+        <div id="structure-msg" style="font-size:12px;color:var(--green);min-height:20px"></div>
+      </div>
+    </div>
+
+    <!-- UPLOAD -->
+    <div class="page" id="page-upload">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Update inventory data</div>
+          <div class="page-sub">Drop new Excel files to refresh the entire system</div>
+        </div>
+      </div>
+
+      <form id="upload-form">
+        <div class="card mb16">
+          <div class="card-title">FINAL PRODUCTS FILE</div>
+          <div class="dropzone" onclick="document.getElementById('nit-file').click()">
+            <p>Nitrosamine_general_orbiton.xlsx</p>
+            <small>Click to browse or drag & drop</small><br><br>
+            <span class="btn btn-ghost" style="font-size:12px">Choose file</span>
+          </div>
+          <input type="file" id="nit-file" accept=".xlsx" style="display:none" onchange="document.querySelector('#upload-form .dropzone p').textContent=this.files[0]?.name||'Choose file'">
+        </div>
+        <div class="card mb16">
+          <div class="card-title">RAW MATERIALS FILE</div>
+          <div class="dropzone" onclick="document.getElementById('raw-file').click()">
+            <p>Raw_materials_for_Nitrosamines_orbiton-2.xlsx</p>
+            <small>Click to browse or drag & drop</small><br><br>
+            <span class="btn btn-ghost" style="font-size:12px">Choose file</span>
+          </div>
+          <input type="file" id="raw-file" accept=".xlsx" style="display:none">
+        </div>
+        <button type="button" class="btn" onclick="uploadFiles()">Upload & refresh dashboard</button>
+        <div id="upload-msg" style="margin-top:12px;font-size:12px;color:var(--green);min-height:20px"></div>
+      </form>
+    </div>
+
+  </main>
+</div>
+
+<!-- Hidden file input for structure uploads -->
+<input type="file" id="table-structure-file" accept="image/png" style="display:none" onchange="uploadStructureFromTable()">
+
+<script>
+let allItems = [];
+
+async function loadData() {
+  const res = await fetch('/api/inventory');
+  const data = await res.json();
+  allItems = data.items;
+
+  document.getElementById('k-total').textContent    = data.summary.total;
+  document.getElementById('k-critical').textContent = data.summary.critical;
+  document.getElementById('k-watch').textContent    = data.summary.watch;
+  document.getElementById('k-safe').textContent     = data.summary.safe;
+  document.getElementById('k-avg').textContent      = data.summary.avg_days + 'd';
+  document.getElementById('last-update').textContent = 'Updated: ' + data.updated;
+
+  buildStockTable(data.items);
+  buildAlerts(data.items);
+  buildPredictions(data.items);
+  buildAnalysis(data.items);
+  buildLoggerDropdown(data.items);
+  drawBarChart(data.items);
+  drawTrendChart();
+  drawProjChart(data.items);
+  drawPieChart(data.items);
+}
+
+function buildStockTable(items) {
+  const tb = document.getElementById('stock-table');
+  tb.innerHTML = '';
+  items.forEach(item => {
+    const pct = Math.min(100, Math.round(item.days_remaining / 60 * 100));
+    const short = item.name.length > 30 ? item.name.slice(0,28) + '…' : item.name;
+    tb.innerHTML += `<tr>
+      <td style="position:relative;">
+        ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width:60px; height:40px; object-fit:contain;" onerror="this.style.display='none'">` : ''}
+        <button onclick="triggerStructureUpload('${item.name}')" style="position:absolute; top:2px; right:2px; background:rgba(99,102,241,.8); border:none; border-radius:3px; width:16px; height:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:10px; color:white;" title="Upload PNG structure">↑</button>
+      </td>
+      <td title="${item.name}" style="max-width:180px">${short}</td>
+      <td style="font-family:var(--mono)">${item.qty_g}g</td>
+      <td>
+        <span style="font-family:var(--mono);font-weight:500">${item.days_remaining}d</span>
+        <div class="bar-wrap"><div class="bar ${item.status}" style="width:${pct}%"></div></div>
+      </td>
+      <td><span class="pill ${item.status}">${item.status.toUpperCase()}</span></td>
+    </tr>`;
+  });
+}
+
+function buildAlerts(items) {
+  const al = document.getElementById('alert-list');
+  al.innerHTML = '';
+  const top = [...items].sort((a,b)=>a.days_remaining-b.days_remaining).slice(0,6);
+  top.forEach(item => {
+    const msg = item.status==='critical'
+      ? `Only ${item.days_remaining} days left — reorder now`
+      : item.status==='watch'
+      ? `${item.days_remaining} days — order within 2 weeks`
+      : `${item.days_remaining} days — stock healthy`;
+    const short = item.name.length > 36 ? item.name.slice(0,34)+'…' : item.name;
+    al.innerHTML += `<div class="alert ${item.status}">
+      <div class="alert-icon ${item.status}"></div>
+      <div><div class="alert-name">${short}</div><div class="alert-msg">${msg}</div></div>
+    </div>`;
+  });
+}
+
+function buildPredictions(items) {
+  const pl = document.getElementById('pred-list');
+  pl.innerHTML = '';
+  items.forEach(item => {
+    pl.innerHTML += `<div class="pred-item ${item.status}">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <img src="${item.image}" alt="${item.name}" style="width:40px; height:30px; object-fit:contain;" onerror="this.style.display='none'">
+        <div>
+          <div class="pred-name">${item.name.length>38?item.name.slice(0,36)+'…':item.name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${item.daily_use_g}g/day · Batch: ${item.batch}</div>
+        </div>
+      </div>
+      <div class="pred-detail">
+        <div class="pred-days ${item.status}">${item.days_remaining}d</div>
+        <div style="font-size:10px;font-family:var(--mono);margin-top:2px">${item.depletion_date}</div>
+      </div>
+    </div>`;
+  });
+
+  const critical = items.filter(i=>i.status==='critical');
+  const watch    = items.filter(i=>i.status==='watch');
+  document.getElementById('pred-explain').innerHTML =
+    `The AI prediction engine analyses your current stock levels and historical usage rates. <strong>${critical.length} compound${critical.length!==1?'s':''} are critical</strong>${critical.length?': '+critical.map(i=>'<strong>'+i.name.slice(0,25)+'</strong>').join(', '):''}.
+    ${watch.length?`<strong>${watch.length} compounds</strong> are on the watch list and should be ordered within 2 weeks. `:''} 
+    Predictions improve automatically as you log actual usage events. The model recalculates daily averages using the last 30 usage entries per compound.`;
+}
+
+function buildAnalysis(items) {
+  const tb = document.getElementById('analysis-table');
+  tb.innerHTML = '';
+  let highRisk = [], allRatios = [];
+  items.forEach(item => {
+    const risk = item.raw_qty_g < 50 ? 'critical' : item.raw_qty_g < 100 ? 'watch' : 'safe';
+    allRatios.push(item.ratio);
+    if(risk==='critical') highRisk.push(item.raw_material);
+    tb.innerHTML += `<tr>
+      <td style="font-family:var(--mono);font-size:11px">${item.raw_material}</td>
+      <td style="font-size:11px;color:var(--muted)">${item.name.length>30?item.name.slice(0,28)+'…':item.name}</td>
+      <td style="font-family:var(--mono)">${item.raw_qty_g}g</td>
+      <td style="font-family:var(--mono)">${item.qty_g}g</td>
+      <td style="font-family:var(--mono);font-weight:500">${item.ratio}:1</td>
+      <td><span class="pill ${risk}">${risk.toUpperCase()}</span></td>
+    </tr>`;
+  });
+  const avgRatio = Math.round(allRatios.reduce((a,b)=>a+b,0)/allRatios.length);
+  document.getElementById('analysis-explain').innerHTML =
+    `Your 9 precursor–nitrosamine pairs have an average conversion ratio of <strong>${avgRatio}:1</strong> — meaning it takes ${avgRatio}g of raw material to produce 1g of nitrosamine compound.
+    ${highRisk.length?`<strong>High-risk raw materials with low stock (&lt;50g): ${highRisk.join(', ')}</strong>. These need immediate attention as even small shortages cause compound unavailability.`:
+    'All raw material stocks are at adequate levels.'} The system tracks both levels simultaneously so you are always aware of upstream risk.`;
+}
+
+function buildLoggerDropdown(items) {
+  const sel = document.getElementById('log-compound');
+  const resel = document.getElementById('restock-compound');
+  const struct = document.getElementById('structure-compound');
+  sel.innerHTML = '<option value="">Select compound…</option>';
+  resel.innerHTML = '<option value="">Select compound…</option>';
+  struct.innerHTML = '<option value="">Select compound…</option>';
+  items.forEach(item => {
+    sel.innerHTML += `<option value="${item.name}">${item.name}</option>`;
+    resel.innerHTML += `<option value="${item.name}">${item.name}</option>`;
+    struct.innerHTML += `<option value="${item.name}">${item.name}</option>`;
+  });
+}
+
+async function logUsage() {
+  const name = document.getElementById('log-compound').value;
+  const qty  = parseFloat(document.getElementById('log-qty').value);
+  if (!name || isNaN(qty) || qty <= 0) {
+    document.getElementById('log-msg').textContent = 'Please select a compound and enter a valid quantity.';
+    document.getElementById('log-msg').style.color = 'var(--red)';
+    return;
+  }
+  await fetch('/api/update_usage', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,used_g:qty})
+  });
+  document.getElementById('log-msg').textContent = `Logged ${qty}g of ${name.slice(0,30)}… — predictions updated.`;
+  document.getElementById('log-msg').style.color = 'var(--green)';
+  document.getElementById('log-qty').value = '';
+  setTimeout(loadData, 300);
+}
+
+async function logRestock() {
+  const name = document.getElementById('restock-compound').value;
+  const qty  = parseFloat(document.getElementById('restock-qty').value);
+  if (!name || isNaN(qty) || qty <= 0) {
+    document.getElementById('restock-msg').textContent = 'Please select a compound and enter a valid quantity.';
+    document.getElementById('restock-msg').style.color = 'var(--red)';
+    return;
+  }
+  await fetch('/api/restock', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,restocked_g:qty})
+  });
+  document.getElementById('restock-msg').textContent = `Logged ${qty}g restock of ${name.slice(0,30)}… — inventory updated.`;
+  document.getElementById('restock-msg').style.color = 'var(--green)';
+  document.getElementById('restock-qty').value = '';
+  setTimeout(loadData, 300);
+}
+
+async function uploadStructure() {
+  const name = document.getElementById('structure-compound').value;
+  const file = document.getElementById('structure-file').files[0];
+  const msg = document.getElementById('structure-msg');
+
+  if (!name || !file) {
+    msg.style.color = 'var(--amber)';
+    msg.textContent = 'Please select both compound and image file.';
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('image', file);
+
+  const resp = await fetch('/api/upload_structure', { method:'POST', body: formData });
+  const data = await resp.json();
+
+  if (data.ok) {
+    msg.style.color = 'var(--green)';
+    msg.textContent = 'Structure uploaded. Refreshing inventory display.';
+    document.getElementById('structure-file').value = '';
+    setTimeout(loadData, 500);
+  } else {
+    msg.style.color = 'var(--red)';
+    msg.textContent = data.error || 'Upload failed';
+  }
+}
+
+let currentUploadCompound = '';
+
+function triggerStructureUpload(compoundName) {
+  currentUploadCompound = compoundName;
+  document.getElementById('table-structure-file').click();
+}
+
+async function uploadStructureFromTable() {
+  const file = document.getElementById('table-structure-file').files[0];
+  
+  if (!currentUploadCompound || !file) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('name', currentUploadCompound);
+  formData.append('image', file);
+
+  try {
+    const resp = await fetch('/api/upload_structure', { method:'POST', body: formData });
+    const data = await resp.json();
+
+    if (data.ok) {
+      // Show success message briefly
+      showTableMessage('Structure uploaded successfully!', 'green');
+      setTimeout(loadData, 500);
+    } else {
+      showTableMessage(data.error || 'Upload failed', 'red');
+    }
+  } catch (error) {
+    showTableMessage('Upload failed', 'red');
+  }
+
+  // Reset
+  document.getElementById('table-structure-file').value = '';
+  currentUploadCompound = '';
+}
+
+function showTableMessage(message, color) {
+  // Create a temporary message element
+  const msg = document.createElement('div');
+  msg.textContent = message;
+  msg.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: ${color === 'green' ? 'rgba(16,185,129,.9)' : 'rgba(239,68,68,.9)'};
+    color: white;
+    padding: 10px 15px;
+    border-radius: 6px;
+    font-size: 12px;
+    z-index: 1000;
+    animation: fadeIn 0.3s;
+  `;
+  document.body.appendChild(msg);
+  setTimeout(() => {
+    msg.style.animation = 'fadeOut 0.3s';
+    setTimeout(() => document.body.removeChild(msg), 300);
+  }, 2000);
+}
+
+async function uploadFiles() {
+  const nit = document.getElementById('nit-file').files[0];
+  const raw = document.getElementById('raw-file').files[0];
+  if (!nit && !raw) {
+    document.getElementById('upload-msg').textContent = 'Please select at least one file.';
+    return;
+  }
+  const fd = new FormData();
+  if (nit) fd.append('nitrosamines', nit);
+  if (raw) fd.append('raw_materials', raw);
+  const res = await fetch('/api/upload', {method:'POST', body:fd});
+  const data = await res.json();
+  document.getElementById('upload-msg').textContent = data.message;
+  setTimeout(loadData, 500);
+}
+
+let barChart, trendChart, projChart, pieChart;
+
+function drawBarChart(items) {
+  const ctx = document.getElementById('barChart').getContext('2d');
+  if (barChart) barChart.destroy();
+  const labels = items.map(i => i.name.replace('N-Nitroso','').replace('N-Nitro','').slice(0,14).trim());
+  const days   = items.map(i => i.days_remaining);
+  const colors = days.map(d => d<15?'rgba(239,68,68,.8)':d<30?'rgba(245,158,11,.8)':'rgba(16,185,129,.8)');
+  barChart = new Chart(ctx, {type:'bar',data:{labels,datasets:[{data:days,backgroundColor:colors,borderRadius:5,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw} days remaining`}}},
+    scales:{x:{ticks:{color:'#6b7280',font:{size:10,family:'IBM Plex Mono'},maxRotation:40},grid:{display:false}},
+    y:{ticks:{color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'},title:{display:true,text:'Days remaining',color:'#6b7280',font:{size:10}}}}}});
+}
+
+function drawTrendChart() {
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+  const weeks = ['Wk1','Wk2','Wk3','Wk4','Wk5','Wk6','Wk7','Wk8'];
+  const usage = [0.14,0.18,0.16,0.20,0.17,0.19,0.18,0.18];
+  trendChart = new Chart(ctx, {type:'line',data:{labels:weeks,datasets:[{label:'Avg daily use (g)',data:usage,borderColor:'#818cf8',backgroundColor:'rgba(129,140,248,.08)',tension:.4,pointRadius:3,fill:true}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6b7280',font:{size:10}}}},
+    scales:{x:{ticks:{color:'#6b7280',font:{size:10}},grid:{display:false}},y:{ticks:{color:'#6b7280',font:{size:10}},grid:{color:'rgba(255,255,255,.04)'}}}}});
+}
+
+function drawProjChart(items) {
+  const ctx = document.getElementById('projChart').getContext('2d');
+  if (projChart) projChart.destroy();
+  const days = Array.from({length:31},(_,i)=>i);
+  const top3 = items.slice(0,3);
+  const colors = ['#ef4444','#f59e0b','#818cf8'];
+  const datasets = top3.map((item,i)=>({
+    label: item.name.slice(0,20),
+    data: days.map(d=>Math.max(0,+(item.qty_g - item.daily_use_g*d).toFixed(3))),
+    borderColor: colors[i], backgroundColor:'transparent', tension:.2, pointRadius:0, borderWidth:1.5
+  }));
+  projChart = new Chart(ctx, {type:'line',data:{labels:days.map(d=>'D'+d),datasets},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6b7280',font:{size:9},boxWidth:8}}},
+    scales:{x:{ticks:{color:'#6b7280',font:{size:9},maxTicksLimit:8},grid:{display:false}},y:{ticks:{color:'#6b7280',font:{size:9}},grid:{color:'rgba(255,255,255,.04)'},title:{display:true,text:'Stock (g)',color:'#6b7280',font:{size:9}}}}}});
+}
+
+function drawPieChart(items) {
+  const ctx = document.getElementById('pieChart').getContext('2d');
+  if (pieChart) pieChart.destroy();
+  const pallete = ['#818cf8','#10b981','#f59e0b','#378ADD','#ef4444','#14b8a6','#d4537e','#888780','#d85a30'];
+  pieChart = new Chart(ctx, {type:'doughnut',data:{labels:items.map(i=>i.name.slice(0,22)),datasets:[{data:items.map(i=>+(i.qty_g*1000).toFixed(1)),backgroundColor:pallete,borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#6b7280',font:{size:10},boxWidth:10,padding:8}}}}});
+}
+
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  el.classList.add('active');
+}
+
+loadData();
+setInterval(loadData, 60000);
+</script>
+</body>
+</html>
